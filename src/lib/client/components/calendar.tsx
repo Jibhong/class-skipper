@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import { FaAngleLeft, FaAngleRight } from "react-icons/fa";
 
 const MONTH_NAMES = [
   "January", "February", "March",
@@ -18,15 +19,15 @@ const startDay: Day = { year: 2026, month: 1, day: 1 };
 const endDay: Day = { year: 2026, month: 12, day: 31 };
 
 // Numeric states: 1 = attend, 0 = absent, 2 = day off
-export type DateState = 1 | 0 | 2;
+type DateState = 1 | 0 | 2;
 
-export type DateStateRecord = {
+type DateStateRecord = {
   date: Day;
   state: DateState;
 };
 
 // Dummy data mapping specific dates to states
-export const dummyRecords: DateStateRecord[] = [
+const dummyRecords: DateStateRecord[] = [
   { date: { year: 2026, month: 1, day: 5 }, state: 1 }, // attend
   { date: { year: 2026, month: 1, day: 6 }, state: 1 }, // attend
   { date: { year: 2026, month: 1, day: 7 }, state: 0 }, // absent
@@ -39,18 +40,18 @@ export const dummyRecords: DateStateRecord[] = [
 ];
 
 // Helper functions for date operations
-export function isSameDay(d1: Day, d2: Day): boolean {
+function isSameDay(d1: Day, d2: Day): boolean {
   return d1.year === d2.year && d1.month === d2.month && d1.day === d2.day;
 }
 
-export function isDateInRange(date: Day, start: Day, end: Day): boolean {
+function isDateInRange(date: Day, start: Day, end: Day): boolean {
   const dVal = date.year * 10000 + date.month * 100 + date.day;
   const sVal = start.year * 10000 + start.month * 100 + start.day;
   const eVal = end.year * 10000 + end.month * 100 + end.day;
   return dVal >= sVal && dVal <= eVal;
 }
 
-export function getDayState(date: Day): DateState | "Default" | undefined {
+function getDayState(date: Day): DateState | "Default" | undefined {
   if (!isDateInRange(date, startDay, endDay)) {
     return undefined;
   }
@@ -61,43 +62,90 @@ export function getDayState(date: Day): DateState | "Default" | undefined {
   return "Default";
 }
 
-export default function Calendar() {
-  const [allMonth, setAllMonth] = useState<Day[]>([]);
-  useEffect(() => {
-    async function loadAllMonth() {
-      const result: Day[] = []
-
-      let y = startDay.year
-      let m = startDay.month
-
-      while (y < endDay.year || (y === endDay.year && m <= endDay.month)) {
-        result.push({ year: y, month: m, day: 1 })
-
-        m++
-        if (m > 12) {
-          m = 1
-          y++
-        }
-      }
-
-      setAllMonth(result);
+function goPrev() {
+  setCurrentMonth((prev) => {
+    if (prev.month === 1) {
+      return { year: prev.year - 1, month: 12 };
     }
-    loadAllMonth()
+    return { ...prev, month: prev.month - 1 };
+  });
+}
+function goNext() {
+  setCurrentMonth((prev) => {
+    if (prev.month === 12) {
+      return { year: prev.year + 1, month: 1 };
+    }
+    return { ...prev, month: prev.month + 1 };
+  });
+}
+
+
+export default function Calendar() {
+  const [allMonth, setAllMonth] = useState<Day[]>([])
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const result: Day[] = []
+
+    let y = startDay.year
+    let m = startDay.month
+
+    while (y < endDay.year || (y === endDay.year && m <= endDay.month)) {
+      result.push({ year: y, month: m, day: 1 })
+
+      m++
+      if (m > 12) {
+        m = 1
+        y++
+      }
+    }
+
+    setAllMonth(result)
   }, [])
 
+  const scroll = (dir: number) => {
+    if (!scrollRef.current) return
+    const width = scrollRef.current.clientWidth
+
+    scrollRef.current.scrollBy({
+      left: dir * width,
+      behavior: "smooth"
+    })
+  }
+
   return (
-    <div
-      className="w-xl flex overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar"
-      style={{
-        scrollbarWidth: "none",
-        msOverflowStyle: "none"
-      }}
-    >
-      {allMonth.map((m, i) => (
-        <div key={i} className="snap-start shrink-0 w-full">
-          <MonthView day={m} />
-        </div>
-      ))}
+    <div className="max-w-xl mx-auto relative flex items-center justify-center">
+      {/* Buttons */}
+      <div className="absolute top-0 right-0 m-4 flex gap-2 z-10">
+        
+        <button
+          onClick={() => scroll(-1)}
+          className="p-2 rounded bg-slate-200 hover:bg-slate-300 hover:cursor-pointer"
+        >
+          <FaAngleLeft size={18} />
+        </button>
+        <button
+          onClick={() => scroll(1)}
+          className="p-2 rounded bg-slate-200 hover:bg-slate-300 hover:cursor-pointer"
+        >
+          <FaAngleRight size={18} />
+        </button>
+      </div>
+      {/* Scroll container */}
+
+      <div
+        ref={scrollRef}
+        className="flex w-xl overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar"
+      >
+        {allMonth.map((m, i) => (
+          <div
+            key={i}
+            className="snap-start shrink-0 w-full"
+          >
+            <MonthView day={m} />
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -150,6 +198,8 @@ function MonthView({ day }: MonthViewProps) {
         </div>
       </div>
 
+
+
       {/* Header */}
       <div className="grid grid-cols-7 gap-1 mb-1">
         {dateText.map((data, i) => (
@@ -174,13 +224,13 @@ function MonthView({ day }: MonthViewProps) {
 
             if (state === 1) {
               // attend: Fill the day grid background with green.
-              cellClass = "bg-green-500 text-white font-medium";
+              cellClass = "bg-emerald-400 text-white";
             } else if (state === 0) {
               // absent: Fill the day grid background with red.
-              cellClass = "bg-red-400 text-white font-medium";
+              cellClass = "bg-rose-400 text-white";
             } else if (state === 2) {
               // day off: Fill the day grid background with gray, and change the day number text color to red.
-              cellClass = "bg-amber-200";
+              cellClass = "bg-amber-400 text-white";
             } else {
               // Default state: Fill the day grid background with a light/neutral gray (distinct from the 'day off' gray),
               // but KEEP the day number text color as the standard/default color.
