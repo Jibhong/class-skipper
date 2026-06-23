@@ -1,25 +1,71 @@
 import { useState, useEffect } from "react"
-import { devwarn } from "@/lib/client/devlog";
+
 const MONTH_NAMES = [
   "January", "February", "March",
   "April", "May", "June",
   "July", "August", "September",
   "October", "November", "December"
 ]
+
 type Day = {
   day: number;
   month: number;
   year: number;
 };
+
+// Calendar range defined by the two existing variables at the module level
+const startDay: Day = { year: 2026, month: 1, day: 1 };
+const endDay: Day = { year: 2026, month: 12, day: 31 };
+
+// Numeric states: 1 = attend, 0 = absent, 2 = day off
+export type DateState = 1 | 0 | 2;
+
+export type DateStateRecord = {
+  date: Day;
+  state: DateState;
+};
+
+// Dummy data mapping specific dates to states
+export const dummyRecords: DateStateRecord[] = [
+  { date: { year: 2026, month: 1, day: 5 }, state: 1 }, // attend
+  { date: { year: 2026, month: 1, day: 6 }, state: 1 }, // attend
+  { date: { year: 2026, month: 1, day: 7 }, state: 0 }, // absent
+  { date: { year: 2026, month: 1, day: 9 }, state: 2 }, // day off
+  { date: { year: 2026, month: 2, day: 14 }, state: 0 }, // absent
+  { date: { year: 2026, month: 2, day: 15 }, state: 2 }, // day off
+  { date: { year: 2026, month: 2, day: 23 }, state: 1 }, // attend
+  { date: { year: 2026, month: 2, day: 24 }, state: 0 }, // absent
+  { date: { year: 2026, month: 2, day: 25 }, state: 2 }, // day off
+];
+
+// Helper functions for date operations
+export function isSameDay(d1: Day, d2: Day): boolean {
+  return d1.year === d2.year && d1.month === d2.month && d1.day === d2.day;
+}
+
+export function isDateInRange(date: Day, start: Day, end: Day): boolean {
+  const dVal = date.year * 10000 + date.month * 100 + date.day;
+  const sVal = start.year * 10000 + start.month * 100 + start.day;
+  const eVal = end.year * 10000 + end.month * 100 + end.day;
+  return dVal >= sVal && dVal <= eVal;
+}
+
+export function getDayState(date: Day): DateState | "Default" | undefined {
+  if (!isDateInRange(date, startDay, endDay)) {
+    return undefined;
+  }
+  const record = dummyRecords.find(r => isSameDay(r.date, date));
+  if (record) {
+    return record.state;
+  }
+  return "Default";
+}
+
 export default function Calendar() {
-  const [nowDay, setNowDay] = useState(Math.floor((Date.now() / 1000) / 86400))
   const [allMonth, setAllMonth] = useState<Day[]>([]);
   useEffect(() => {
     async function loadAllMonth() {
       const result: Day[] = []
-
-      const startDay: Day = { year: 2026, month: 1, day: 1 };
-      const endDay: Day = { year: 2026, month: 12, day: 31 };
 
       let y = startDay.year
       let m = startDay.month
@@ -120,16 +166,35 @@ function MonthView({ day }: MonthViewProps) {
       <div className="grid grid-cols-7 grid-rows-6 gap-1">
         {cells.map((cell, i) => {
           const isSunday = i % 7 === 0;
+          let cellClass = "";
+
+          if (cell.type === "current") {
+            const currentDay: Day = { year: day.year, month: day.month, day: cell.value };
+            const state = getDayState(currentDay);
+
+            if (state === 1) {
+              // attend: Fill the day grid background with green.
+              cellClass = "bg-green-500 text-white font-medium";
+            } else if (state === 0) {
+              // absent: Fill the day grid background with red.
+              cellClass = "bg-red-400 text-white font-medium";
+            } else if (state === 2) {
+              // day off: Fill the day grid background with gray, and change the day number text color to red.
+              cellClass = "bg-amber-200";
+            } else {
+              // Default state: Fill the day grid background with a light/neutral gray (distinct from the 'day off' gray),
+              // but KEEP the day number text color as the standard/default color.
+              const textColor = isSunday ? "text-red-400" : "text-black";
+              cellClass = `bg-slate-200 ${textColor}`;
+            }
+          } else {
+            cellClass = isSunday ? "bg-slate-100 text-red-300" : "bg-slate-100 text-slate-400";
+          }
 
           return (
             <div
               key={i}
-              className={`h-12 px-2 py-1 rounded 
-                ${cell.type === "current" && !isSunday ? "bg-slate-200 text-black" : null}
-                ${cell.type === "current" && isSunday ? "bg-slate-200 text-red-400" : null}
-                ${cell.type !== "current" && !isSunday ? "bg-slate-100 text-slate-400" : null}
-                ${cell.type !== "current" && isSunday ? "bg-slate-100 text-red-300" : null}
-              `}
+              className={`h-12 px-2 py-1 rounded ${cellClass}`}
             >
               {cell.value}
             </div>
