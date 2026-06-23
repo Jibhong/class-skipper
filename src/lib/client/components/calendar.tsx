@@ -63,6 +63,8 @@ export function getDayState(date: Day): DateState | "Default" | undefined {
 
 export default function Calendar() {
   const [allMonth, setAllMonth] = useState<Day[]>([]);
+  const [records, setRecords] = useState<DateStateRecord[]>(dummyRecords);
+
   useEffect(() => {
     async function loadAllMonth() {
       const result: Day[] = []
@@ -85,6 +87,27 @@ export default function Calendar() {
     loadAllMonth()
   }, [])
 
+  const handleDayClick = (date: Day) => {
+    const record = records.find(r => isSameDay(r.date, date));
+    const currentState: DateState | "Default" = record ? record.state : "Default";
+
+    if (currentState === 2) {
+      // Day off is locked and clicking does nothing.
+      return;
+    }
+
+    setRecords(prev => {
+      const filtered = prev.filter(r => !isSameDay(r.date, date));
+      if (currentState === "Default") {
+        return [...filtered, { date, state: 1 }]; // attend
+      } else if (currentState === 1) {
+        return [...filtered, { date, state: 0 }]; // absent
+      } else {
+        return filtered; // back to Default (removed from state)
+      }
+    });
+  };
+
   return (
     <div
       className="w-xl flex overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar"
@@ -95,7 +118,11 @@ export default function Calendar() {
     >
       {allMonth.map((m, i) => (
         <div key={i} className="snap-start shrink-0 w-full">
-          <MonthView day={m} />
+          <MonthView
+            day={m}
+            records={records}
+            onDayClick={handleDayClick}
+          />
         </div>
       ))}
     </div>
@@ -104,8 +131,10 @@ export default function Calendar() {
 
 type MonthViewProps = {
   day: Day;
+  records: DateStateRecord[];
+  onDayClick: (date: Day) => void;
 };
-function MonthView({ day }: MonthViewProps) {
+function MonthView({ day, records, onDayClick }: MonthViewProps) {
   const dateText = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   const firstDay = new Date(day.year, day.month - 1, 1);
@@ -167,10 +196,13 @@ function MonthView({ day }: MonthViewProps) {
         {cells.map((cell, i) => {
           const isSunday = i % 7 === 0;
           let cellClass = "";
+          let currentDay: Day | null = null;
+          let state: DateState | "Default" = "Default";
 
           if (cell.type === "current") {
-            const currentDay: Day = { year: day.year, month: day.month, day: cell.value };
-            const state = getDayState(currentDay);
+            currentDay = { year: day.year, month: day.month, day: cell.value };
+            const record = records.find(r => isSameDay(r.date, currentDay!));
+            state = record ? record.state : "Default";
 
             if (state === 1) {
               // attend: Fill the day grid background with green.
@@ -191,10 +223,21 @@ function MonthView({ day }: MonthViewProps) {
             cellClass = isSunday ? "bg-slate-100 text-red-300" : "bg-slate-100 text-slate-400";
           }
 
+          const isClickable = cell.type === "current" && state !== 2;
+
           return (
             <div
               key={i}
-              className={`h-12 px-2 py-1 rounded ${cellClass}`}
+              className={`h-12 px-2 py-1 rounded ${cellClass} ${
+                isClickable
+                  ? "cursor-pointer select-none transition-all hover:brightness-95 active:scale-95"
+                  : ""
+              }`}
+              onClick={() => {
+                if (isClickable && currentDay) {
+                  onDayClick(currentDay);
+                }
+              }}
             >
               {cell.value}
             </div>
