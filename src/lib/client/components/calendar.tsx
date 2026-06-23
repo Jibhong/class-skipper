@@ -51,17 +51,6 @@ function isDateInRange(date: Day, start: Day, end: Day): boolean {
   return dVal >= sVal && dVal <= eVal;
 }
 
-function getDayState(date: Day): DateState | "Default" | undefined {
-  if (!isDateInRange(date, startDay, endDay)) {
-    return undefined;
-  }
-  const record = dummyRecords.find(r => isSameDay(r.date, date));
-  if (record) {
-    return record.state;
-  }
-  return "Default";
-}
-
 export default function Calendar() {
   const [allMonth, setAllMonth] = useState<Day[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -98,8 +87,9 @@ export default function Calendar() {
   const handleDayClick = (date: Day) => {
     const record = records.find(r => isSameDay(r.date, date));
     const currentState: DateState | "Default" = record ? record.state : "Default";
+    const dayOfWeek = new Date(date.year, date.month - 1, date.day).getDay();
 
-    if (currentState === 2) {
+    if (currentState === 2 || dayOfWeek === 0 || dayOfWeek === 6) {
       // Day off is locked and clicking does nothing.
       return;
     }
@@ -222,6 +212,7 @@ function MonthView({ day, records, onDayClick }: MonthViewProps) {
       <div className="grid grid-cols-7 grid-rows-6 gap-1">
         {cells.map((cell, i) => {
           const isSunday = i % 7 === 0;
+          const isSaturday = i % 7 === 6;
           let cellClass = "";
           let currentDay: Day | null = null;
           let state: DateState | "Default" = "Default";
@@ -243,14 +234,16 @@ function MonthView({ day, records, onDayClick }: MonthViewProps) {
             } else {
               // Default state: Fill the day grid background with a light/neutral gray (distinct from the 'day off' gray),
               // but KEEP the day number text color as the standard/default color.
-              const textColor = isSunday ? "text-red-400" : "text-black";
+              let textColor = "text-black";
+              if (isSunday) textColor = "text-red-400";
+              else if (isSaturday) textColor = "text-violet-800";
               cellClass = `bg-slate-200 ${textColor}`;
             }
           } else {
             cellClass = isSunday ? "bg-slate-100 text-red-300" : "bg-slate-100 text-slate-400";
           }
 
-          const isClickable = cell.type === "current" && state !== 2;
+          const isClickable = cell.type === "current" && state !== 2 && !isSunday && !isSaturday;
 
           return (
             <div
