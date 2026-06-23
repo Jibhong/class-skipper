@@ -62,24 +62,6 @@ function getDayState(date: Day): DateState | "Default" | undefined {
   return "Default";
 }
 
-function goPrev() {
-  setCurrentMonth((prev) => {
-    if (prev.month === 1) {
-      return { year: prev.year - 1, month: 12 };
-    }
-    return { ...prev, month: prev.month - 1 };
-  });
-}
-function goNext() {
-  setCurrentMonth((prev) => {
-    if (prev.month === 12) {
-      return { year: prev.year + 1, month: 1 };
-    }
-    return { ...prev, month: prev.month + 1 };
-  });
-}
-
-
 export default function Calendar() {
   const [allMonth, setAllMonth] = useState<Day[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
