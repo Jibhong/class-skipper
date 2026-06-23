@@ -201,7 +201,7 @@ function MonthView({ day, records, onDayClick }: MonthViewProps) {
         {dateText.map((data, i) => (
           <div
             key={i}
-            className={`px-2 rounded bg-slate-300 ${data === "Sun" ? "text-red-500" : ""}`}
+            className={`px-2 rounded bg-slate-300 ${data === "Sun" ? "text-red-500" : (data === "Sat" ? "text-violet-800" : "")}`}
           >
             {data}
           </div>
