@@ -14,47 +14,34 @@ type Day = {
   year: number;
 };
 
-// Calendar range defined by the two existing variables at the module level
-const startDay: Day = { year: 2026, month: 1, day: 1 };
-const endDay: Day = { year: 2026, month: 12, day: 31 };
-
-// Numeric states: 1 = attend, 0 = absent, 2 = day off
-type DateState = 1 | 0 | 2;
-
-type DateStateRecord = {
+export type DateStateRecord = {
   date: Day;
   state: DateState;
 };
 
-// Dummy data mapping specific dates to states
-const dummyRecords: DateStateRecord[] = [
-  { date: { year: 2026, month: 1, day: 5 }, state: 1 }, // attend
-  { date: { year: 2026, month: 1, day: 6 }, state: 1 }, // attend
-  { date: { year: 2026, month: 1, day: 7 }, state: 0 }, // absent
-  { date: { year: 2026, month: 1, day: 9 }, state: 2 }, // day off
-  { date: { year: 2026, month: 2, day: 14 }, state: 0 }, // absent
-  { date: { year: 2026, month: 2, day: 15 }, state: 2 }, // day off
-  { date: { year: 2026, month: 2, day: 23 }, state: 1 }, // attend
-  { date: { year: 2026, month: 2, day: 24 }, state: 0 }, // absent
-  { date: { year: 2026, month: 2, day: 25 }, state: 2 }, // day off
-];
+type CalendarProps = {
+  startDay: Day;
+  endDay: Day;
+  dayRecords: DateStateRecord[];
+};
+
+
+// Numeric states: 1 = attend, 0 = absent, 2 = day off
+type DateState = 1 | 0 | 2;
 
 // Helper functions for date operations
 function isSameDay(d1: Day, d2: Day): boolean {
   return d1.year === d2.year && d1.month === d2.month && d1.day === d2.day;
 }
 
-function isDateInRange(date: Day, start: Day, end: Day): boolean {
-  const dVal = date.year * 10000 + date.month * 100 + date.day;
-  const sVal = start.year * 10000 + start.month * 100 + start.day;
-  const eVal = end.year * 10000 + end.month * 100 + end.day;
-  return dVal >= sVal && dVal <= eVal;
-}
-
-export default function Calendar() {
+export default function Calendar({startDay, endDay, dayRecords}:CalendarProps) {
   const [allMonth, setAllMonth] = useState<Day[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [records, setRecords] = useState<DateStateRecord[]>(dummyRecords);
+  const [records, setRecords] = useState<DateStateRecord[]>(dayRecords);
+
+  useEffect(() => {
+    setRecords(dayRecords);
+  }, [dayRecords]);
 
   useEffect(() => {
     const result: Day[] = []
