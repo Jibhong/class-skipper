@@ -1,11 +1,22 @@
+"use client";
 import { useState, useEffect, useRef } from "react";
 import { FaAngleLeft, FaAngleRight } from "react-icons/fa";
 
+import { singletonFirestorePublic } from "@/lib/client/singleton/client.firebasePublic";
+import { doc, getDoc } from "firebase/firestore";
 const MONTH_NAMES = [
-  "January", "February", "March",
-  "April", "May", "June",
-  "July", "August", "September",
-  "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -23,24 +34,57 @@ export type DayData = {
   isHaveNote: boolean;
 };
 
-type CalendarProps = {
-  startDay: Day;
-  endDay: Day;
-  dayRecords: DayData[];
-};
-
 function isSameDay(d1: Day, d2: Day): boolean {
   return d1.year === d2.year && d1.month === d2.month && d1.day === d2.day;
 }
 
-export default function Calendar({ startDay, endDay, dayRecords, }: CalendarProps) {
-  const [allMonths, setAllMonths] = useState<Day[]>([]);
-  const [records, setRecords] = useState<DayData[]>(dayRecords);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
+export default function Calendar() {
+  const startDay: Day = { day: 0, month: 1, year: 2026 };
+  const endDay: Day = { day: 0, month: 12, year: 2027 };
+  const [records, setRecords] = useState<DayData[]>([]);
+  const [nowMonth, setNowMonth] = useState<Day>({day:0,month:0,year:0});
   useEffect(() => {
-    setRecords(dayRecords);
-  }, [dayRecords]);
+    async function fetchDayOff(monthString: string) {
+      try {
+        const ref = doc(singletonFirestorePublic, "day-off", monthString);
+        const snap = await getDoc(ref);
+
+        if (!snap.exists()) {
+          console.warn("No data found");
+          return;
+        }
+
+        const data = snap.data();
+        const binNumber = data?.bin ?? 0;
+
+        const bin: boolean[] = Array.from(
+          { length: 31 },
+          (_, i) => ((binNumber >> i) & 1) === 1,
+        );
+        console.log(bin);
+        const mapped: DayData[] = bin
+          .map((isOff, i) => ({
+            day: {
+              year: nowMonth.year,
+              month: nowMonth.month,
+              day: i + 1,
+            },
+            isDayOff: isOff,
+            isAttened: false,
+            isHaveNote: false,
+          }))
+          .filter((r) => r.isDayOff);
+        console.log(mapped);
+        setRecords(mapped);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    fetchDayOff(`${nowMonth.year}-${String(nowMonth.month).padStart(2, "0")}`);
+  }, [nowMonth]);
+  const [allMonths, setAllMonths] = useState<Day[]>([]);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const result: Day[] = [];
@@ -80,7 +124,33 @@ export default function Calendar({ startDay, endDay, dayRecords, }: CalendarProp
           ];
     });
   };
+  const monthRefs = useRef<(HTMLDivElement | null)[]>([]);
+  useEffect(() => {
+    if (allMonths.length === 0) return;
 
+    const observers: IntersectionObserver[] = [];
+
+    monthRefs.current.forEach((el, idx) => {
+      if (!el) return;
+      const obs = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) {
+            const { year, month } = allMonths[idx];
+            console.log({ year, month });
+            setNowMonth({year:year,month:month,day:nowMonth.day});
+          }
+        },
+        {
+          root: scrollRef.current,
+          threshold: 0.5, // fires when >50% of the panel is visible
+        },
+      );
+      obs.observe(el);
+      observers.push(obs);
+    });
+
+    return () => observers.forEach((obs) => obs.disconnect());
+  }, [allMonths]);
   return (
     <div className="max-w-xl mx-auto relative flex items-center justify-center">
       <div className="absolute top-0 right-0 m-4 flex gap-2 z-10">
@@ -129,6 +199,9 @@ export default function Calendar({ startDay, endDay, dayRecords, }: CalendarProp
           return (
             <div
               key={monthIdx}
+              ref={(el) => {
+                monthRefs.current[monthIdx] = el;
+              }}
               className="snap-start shrink-0 w-full min-w-xl p-4 snap-center"
             >
               <div className="flex mb-1 gap-1 items-end">
@@ -173,7 +246,8 @@ export default function Calendar({ startDay, endDay, dayRecords, }: CalendarProp
                   const record = records.find((r) =>
                     isSameDay(r.day, currentDay),
                   );
-                  const isClickable = !(record?.isDayOff) && !isSunday && !isSaturday;
+                  const isClickable =
+                    !record?.isDayOff && !isSunday && !isSaturday;
 
                   let cellClass: string;
                   if (record?.isDayOff)
