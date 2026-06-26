@@ -14,30 +14,29 @@ type Day = {
   year: number;
 };
 
-export type DateStateRecord = {
-  date: Day;
-  state: DateState;
+export type DayData = {
+  day: Day;
+  isDayOff: boolean;
+  isAttened: boolean;
+  isHaveNote: boolean;
 };
 
 type CalendarProps = {
   startDay: Day;
   endDay: Day;
-  dayRecords: DateStateRecord[];
+  dayRecords: DayData[];
 };
 
-
-// Numeric states: 1 = attend, 0 = absent, 2 = day off
-type DateState = 1 | 0 | 2;
 
 // Helper functions for date operations
 function isSameDay(d1: Day, d2: Day): boolean {
   return d1.year === d2.year && d1.month === d2.month && d1.day === d2.day;
 }
 
-export default function Calendar({startDay, endDay, dayRecords}:CalendarProps) {
+export default function Calendar({ startDay, endDay, dayRecords }: CalendarProps) {
   const [allMonth, setAllMonth] = useState<Day[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [records, setRecords] = useState<DateStateRecord[]>(dayRecords);
+  const [records, setRecords] = useState<DayData[]>(dayRecords);
 
   useEffect(() => {
     setRecords(dayRecords);
@@ -72,23 +71,20 @@ export default function Calendar({startDay, endDay, dayRecords}:CalendarProps) {
     })
   }
   const handleDayClick = (date: Day) => {
-    const record = records.find(r => isSameDay(r.date, date));
-    const currentState: DateState | "Default" = record ? record.state : "Default";
+    const record = records.find(r => isSameDay(r.day, date));
     const dayOfWeek = new Date(date.year, date.month - 1, date.day).getDay();
 
-    if (currentState === 2 || dayOfWeek === 0 || dayOfWeek === 6) {
+    if ((record && record.isDayOff) || dayOfWeek === 0 || dayOfWeek === 6) {
       // Day off is locked and clicking does nothing.
       return;
     }
 
     setRecords(prev => {
-      const filtered = prev.filter(r => !isSameDay(r.date, date));
-      if (currentState === "Default") {
-        return [...filtered, { date, state: 1 }]; // attend
-      } else if (currentState === 1) {
-        return [...filtered, { date, state: 0 }]; // absent
+      const filtered = prev.filter(r => !isSameDay(r.day, date));
+      if (record) {
+        return [...filtered, { ...record, isAttened: !record.isAttened }];
       } else {
-        return filtered; // back to Default (removed from state)
+        return [...filtered, { day: date, isDayOff: false, isAttened: true, isHaveNote: false }];
       }
     });
   };
@@ -133,7 +129,7 @@ export default function Calendar({startDay, endDay, dayRecords}:CalendarProps) {
 
 type MonthViewProps = {
   day: Day;
-  records: DateStateRecord[];
+  records: DayData[];
   onDayClick: (date: Day) => void;
 };
 function MonthView({ day, records, onDayClick }: MonthViewProps) {
@@ -202,12 +198,16 @@ function MonthView({ day, records, onDayClick }: MonthViewProps) {
           const isSaturday = i % 7 === 6;
           let cellClass = "";
           let currentDay: Day | null = null;
-          let state: DateState | "Default" = "Default";
 
           if (cell.type === "current") {
             currentDay = { year: day.year, month: day.month, day: cell.value };
-            const record = records.find(r => isSameDay(r.date, currentDay!));
-            state = record ? record.state : "Default";
+            const record = records.find(r => isSameDay(r.day, currentDay!));
+            let state: 0 | 1 | 2 | "Default" = "Default";
+            if (record) {
+              if (record.isDayOff) state = 2;
+              else if (record.isAttened) state = 1;
+              else state = 0;
+            }
 
             if (state === 1) {
               // attend: Fill the day grid background with green.
@@ -216,38 +216,45 @@ function MonthView({ day, records, onDayClick }: MonthViewProps) {
               // absent: Fill the day grid background with red.
               cellClass = "bg-rose-400 text-white";
             } else if (state === 2) {
-              // day off: Fill the day grid background with gray, and change the day number text color to red.
-              cellClass = "bg-amber-400 text-white";
+              // day off: Fill the day grid background with amber.
+              cellClass = "bg-violet-200 text-slate-400";
             } else {
-              // Default state: Fill the day grid background with a light/neutral gray (distinct from the 'day off' gray),
-              // but KEEP the day number text color as the standard/default color.
+              // Default state: Fill the day grid background with a light/neutral gray
               let textColor = "text-black";
               if (isSunday) textColor = "text-red-400";
               else if (isSaturday) textColor = "text-violet-800";
               cellClass = `bg-slate-200 ${textColor}`;
             }
+
+            const isClickable = state !== 2 && !isSunday && !isSaturday;
+
+            return (
+              <div
+                key={i}
+                className={`h-12 px-2 py-1 rounded ${cellClass} ${isClickable
+                  ? "cursor-pointer select-none transition-all hover:brightness-95 active:scale-95"
+                  : ""
+                  }`}
+                onClick={() => {
+                  if (isClickable && currentDay) {
+                    onDayClick(currentDay! || null);
+                  }
+                }}
+              >
+                {cell.value}
+              </div>
+            );
           } else {
             cellClass = isSunday ? "bg-slate-100 text-red-300" : "bg-slate-100 text-slate-400";
+            return (
+              <div
+                key={i}
+                className={`h-12 px-2 py-1 rounded ${cellClass}`}
+              >
+                {cell.value}
+              </div>
+            );
           }
-
-          const isClickable = cell.type === "current" && state !== 2 && !isSunday && !isSaturday;
-
-          return (
-            <div
-              key={i}
-              className={`h-12 px-2 py-1 rounded ${cellClass} ${isClickable
-                ? "cursor-pointer select-none transition-all hover:brightness-95 active:scale-95"
-                : ""
-                }`}
-              onClick={() => {
-                if (isClickable && currentDay) {
-                  onDayClick(currentDay);
-                }
-              }}
-            >
-              {cell.value}
-            </div>
-          );
         })}
       </div>
     </div>

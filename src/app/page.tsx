@@ -1,27 +1,26 @@
 "use client";
 
 import BuildingRoomSelector from "@/lib/client/components/BuildingRoomSelector";
-import Calendar, { DateStateRecord } from "@/lib/client/components/calendar";
+import Calendar, { DayData } from "@/lib/client/components/calendar";
 import { singletonFirestorePublic } from "@/lib/client/singleton/client.firebasePublic";
 import { doc, getDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
 
-const dummyRecords: DateStateRecord[] = [
-  { date: { year: 2026, month: 1, day: 5 }, state: 1 }, // attend
-  { date: { year: 2026, month: 1, day: 6 }, state: 1 }, // attend
-  { date: { year: 2026, month: 1, day: 7 }, state: 0 }, // absent
-  { date: { year: 2026, month: 1, day: 9 }, state: 2 }, // day off
-  { date: { year: 2026, month: 2, day: 14 }, state: 0 }, // absent
-  { date: { year: 2026, month: 2, day: 15 }, state: 2 }, // day off
-  { date: { year: 2026, month: 2, day: 23 }, state: 1 }, // attend
-  { date: { year: 2026, month: 2, day: 24 }, state: 0 }, // absent
-  { date: { year: 2026, month: 2, day: 25 }, state: 2 }, // day off
+const dummyRecords: DayData[] = [
+  { day: { year: 2026, month: 1, day: 5 }, isDayOff: false, isAttened: false, isHaveNote: false },
+  { day: { year: 2026, month: 1, day: 6 }, isDayOff: false, isAttened: false, isHaveNote: false },
+  { day: { year: 2026, month: 1, day: 7 }, isDayOff: false, isAttened: false, isHaveNote: false },
+  { day: { year: 2026, month: 1, day: 8 }, isDayOff: false, isAttened: false, isHaveNote: false },
+  { day: { year: 2026, month: 2, day: 5 }, isDayOff: false, isAttened: false, isHaveNote: false },
+  { day: { year: 2026, month: 2, day: 6 }, isDayOff: false, isAttened: false, isHaveNote: false },
+  { day: { year: 2026, month: 2, day: 7 }, isDayOff: true, isAttened: false, isHaveNote: false },
+  { day: { year: 2026, month: 2, day: 8 }, isDayOff: false, isAttened: true, isHaveNote: false },
 ];
 export default function Home() {
-  const [records, setRecords] = useState<DateStateRecord[]>([]);
+  const [records, setRecords] = useState<DayData[]>([]);
 
   useEffect(() => {
-    async function fetchDayOff(monthString:string) {
+    async function fetchDayOff(monthString: string) {
       try {
         const ref = doc(singletonFirestorePublic, "day-off", monthString);
         const snap = await getDoc(ref);
@@ -39,17 +38,20 @@ export default function Home() {
           (_, i) => ((binNumber >> i) & 1) === 1,
         );
         console.log(bin);
-        const mapped: DateStateRecord[] = bin.map((data, i) => ({
-          date: {
-            year: 2026,
-            month: 1,
-            day: i + 1, // index -> day
-          },
-          state: data ? 2 : -1,
-        }));
-
-        setRecords(mapped);
+        const mapped: DayData[] = bin
+          .map((isOff, i) => ({
+            day: {
+              year: 2026,
+              month: 1,
+              day: i + 1,
+            },
+            isDayOff: isOff,
+            isAttened: false,
+            isHaveNote: false,
+          }))
+          .filter((r) => r.isDayOff);
         console.log(mapped);
+        setRecords(mapped);
       } catch (err) {
         console.error(err);
       }
