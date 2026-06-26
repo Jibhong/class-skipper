@@ -3,6 +3,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { getFirestoreDB } from "@/lib/server/server.firebaseInterface";
+import { SignJWT } from "jose";
+
 
 export async function POST(req: NextRequest) {
   try {
@@ -51,15 +53,26 @@ export async function POST(req: NextRequest) {
         { status: 401 }
       );
     }
+    const secret = process.env.JWT_SECRET;
+    const secretKey = new TextEncoder().encode(secret);
 
-    return NextResponse.json({
-      success: true,
-      user: {
-        id: userDoc.id,
-        username: user.username,
-        role: user.role,
-      },
+    const token = await new SignJWT({ username })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setExpirationTime("1d")
+      .sign(secretKey);
+
+    const response = NextResponse.json(
+      { status: 200 }
+    );
+    response.cookies.set("session", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/",
+      maxAge: 60 * 60 * 24,
     });
+    return response;
   } catch (error) {
     console.error(error);
 

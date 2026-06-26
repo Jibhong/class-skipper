@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   FaUser,
   FaLock,
@@ -17,6 +18,7 @@ export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const router = useRouter();
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -36,14 +38,12 @@ export default function AuthPage() {
 
       const data = await res.json();
 
-      console.log(data);
 
       if (!res.ok) {
         console.error(data.error);
         return;
       }
-
-      console.log("Logged in:", data.user);
+      router.push("/");
     } catch (err) {
       console.error(err);
     } finally {
@@ -106,7 +106,7 @@ export default function AuthPage() {
         </div>
 
         {/* Remember + Forgot */}
-        <div className="flex items-center justify-between">
+        {/* <div className="flex items-center justify-between">
           <label className="flex items-center gap-2 cursor-pointer select-none">
             <input
               type="checkbox"
@@ -122,12 +122,12 @@ export default function AuthPage() {
           >
             ลืมรหัสผ่าน
           </a>
-        </div>
+        </div> */}
 
         {/* Submit */}
         <button
           type="submit"
-          disabled={loading || !username || !password}
+          disabled={loading}
           className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-pink-400 hover:bg-pink-500 disabled:bg-pink-200 disabled:cursor-not-allowed text-white font-semibold text-base transition-all active:scale-95"
         >
           {loading ? <FaSpinner className="animate-spin" /> : <FaSignInAlt />}
@@ -135,14 +135,14 @@ export default function AuthPage() {
         </button>
 
         {/* Create account */}
-        <p className="text-center text-sm text-gray-400">
+        {/* <p className="text-center text-sm text-gray-400">
           <a
             href="#"
             className="hover:text-pink-500 hover:underline transition-colors"
           >
             สร้างบัญชีใหม่
           </a>
-        </p>
+        </p> */}
       </form>
     </div>
   );
