@@ -39,10 +39,8 @@ function isSameDay(d1: Day, d2: Day): boolean {
 }
 
 export default function Calendar() {
-  const startDay: Day = { day: 0, month: 1, year: 2026 };
-  const endDay: Day = { day: 0, month: 12, year: 2027 };
   const [records, setRecords] = useState<DayData[]>([]);
-  const [nowMonth, setNowMonth] = useState<Day>({day:0,month:0,year:0});
+  const [nowMonth, setNowMonth] = useState<Day>({ day: 0, month: 0, year: 0 });
   useEffect(() => {
     async function fetchDayOff(monthString: string) {
       try {
@@ -87,18 +85,34 @@ export default function Calendar() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const result: Day[] = [];
-    let y = startDay.year;
-    let m = startDay.month;
-    while (y < endDay.year || (y === endDay.year && m <= endDay.month)) {
-      result.push({ year: y, month: m, day: 1 });
-      m++;
-      if (m > 12) {
-        m = 1;
-        y++;
+    async function fetchCalendarRange() {
+      const snap = await getDoc(
+        doc(singletonFirestorePublic, "calendar", "properties")
+      );
+
+      if (!snap.exists()) return;
+
+      const data = snap.data();
+      const startDate = new Date(data["start-calendar"]);
+      const endDate = new Date(data["end-calendar"]);
+
+      const startCalendar: Day = { year: startDate.getFullYear(), month: startDate.getMonth() + 1, day: startDate.getDate() };
+
+      const endCalendar: Day = { year: endDate.getFullYear(), month: endDate.getMonth() + 1, day: endDate.getDate() };
+      const result: Day[] = [];
+      let y = startCalendar.year;
+      let m = startCalendar.month;
+      while (y < endCalendar.year || (y === endCalendar.year && m <= endCalendar.month)) {
+        result.push({ year: y, month: m, day: 1 });
+        m++;
+        if (m > 12) {
+          m = 1;
+          y++;
+        }
       }
+      setAllMonths(result);
     }
-    setAllMonths(result);
+    fetchCalendarRange();
   }, []);
 
   const scroll = (dir: number) => {
@@ -119,9 +133,9 @@ export default function Calendar() {
       return record
         ? [...filtered, { ...record, isAttened: !record.isAttened }]
         : [
-            ...filtered,
-            { day: date, isDayOff: false, isAttened: true, isHaveNote: false },
-          ];
+          ...filtered,
+          { day: date, isDayOff: false, isAttened: true, isHaveNote: false },
+        ];
     });
   };
   const monthRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -137,7 +151,7 @@ export default function Calendar() {
           if (entry.isIntersecting) {
             const { year, month } = allMonths[idx];
             console.log({ year, month });
-            setNowMonth({year:year,month:month,day:nowMonth.day});
+            setNowMonth({ year: year, month: month, day: nowMonth.day });
           }
         },
         {
@@ -153,7 +167,7 @@ export default function Calendar() {
   }, [allMonths]);
   return (
     <div className="max-w-xl mx-auto relative flex items-center justify-center">
-      <div className="absolute top-0 right-0 m-4 flex gap-2 z-10">
+      <div className="absolute top-0 right-0 flex gap-2 z-10">
         <button
           onClick={() => scroll(-1)}
           className="p-2 rounded bg-slate-200 hover:bg-slate-300 hover:cursor-pointer"
@@ -170,7 +184,7 @@ export default function Calendar() {
 
       <div
         ref={scrollRef}
-        className="flex w-xl overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar"
+        className="flex w-xl gap-4 overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar"
       >
         {allMonths.map((month, monthIdx) => {
           const firstDow = new Date(month.year, month.month - 1, 1).getDay();
@@ -202,9 +216,9 @@ export default function Calendar() {
               ref={(el) => {
                 monthRefs.current[monthIdx] = el;
               }}
-              className="snap-start shrink-0 w-full min-w-xl p-4 snap-center"
+              className="snap-start shrink-0 w-full min-w-xl snap-center"
             >
-              <div className="flex mb-1 gap-1 items-end">
+              <div className="flex mb-2 gap-1 items-end">
                 <div className="text-4xl mb-2">
                   {MONTH_NAMES[month.month - 1]}
                 </div>

@@ -4,7 +4,7 @@ import Calendar, { DayData } from "@/lib/client/components/Calendar";
 export default function Home() {
 
   return (
-    <main className="flex flex-col items-center justify-center h-screen">
+    <main className="flex flex-col items-center justify-center h-screen gap-4">
       <BuildingRoomSelector />
       <Calendar />
     </main>
