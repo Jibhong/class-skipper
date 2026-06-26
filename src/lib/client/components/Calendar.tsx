@@ -44,7 +44,7 @@ export default function Calendar() {
   useEffect(() => {
     async function fetchDayOff(monthString: string) {
       try {
-        const ref = doc(singletonFirestorePublic, "day-off", monthString);
+        const ref = doc(singletonFirestorePublic, "calendar", "properties", "day-off", monthString);
         const snap = await getDoc(ref);
 
         if (!snap.exists()) {
@@ -59,7 +59,6 @@ export default function Calendar() {
           { length: 31 },
           (_, i) => ((binNumber >> i) & 1) === 1,
         );
-        console.log(bin);
         const mapped: DayData[] = bin
           .map((isOff, i) => ({
             day: {
@@ -72,7 +71,6 @@ export default function Calendar() {
             isHaveNote: false,
           }))
           .filter((r) => r.isDayOff);
-        console.log(mapped);
         setRecords(mapped);
       } catch (err) {
         console.error(err);
@@ -93,8 +91,8 @@ export default function Calendar() {
       if (!snap.exists()) return;
 
       const data = snap.data();
-      const startDate = new Date(data["start-calendar"]);
-      const endDate = new Date(data["end-calendar"]);
+      const startDate = new Date(`${data["start-calendar"]}-01`);
+      const endDate = new Date(`${data["end-calendar"]}-01`);
 
       const startCalendar: Day = { year: startDate.getFullYear(), month: startDate.getMonth() + 1, day: startDate.getDate() };
 
@@ -150,13 +148,12 @@ export default function Calendar() {
         ([entry]) => {
           if (entry.isIntersecting) {
             const { year, month } = allMonths[idx];
-            console.log({ year, month });
             setNowMonth({ year: year, month: month, day: nowMonth.day });
           }
         },
         {
           root: scrollRef.current,
-          threshold: 0.5, // fires when >50% of the panel is visible
+          threshold: 0.1, // fires when >50% of the panel is visible
         },
       );
       obs.observe(el);
