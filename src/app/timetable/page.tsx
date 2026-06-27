@@ -6,7 +6,7 @@ import { Header } from "@/lib/client/components/Components";
 // 1. Define types for the Timetable data structure
 interface PeriodData {
   subject: string;
-  room?: string;
+  id?: string;
   teacher?: string;
 }
 
@@ -42,60 +42,72 @@ const COLUMNS: ColumnConfig[] = [
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 // 3. Define the dummy data representing a typical school timetable
-const TIMETABLE_DATA: TimetableData = {
-  Monday: {
-    1: { subject: "dummy subject 1", room: "dm_room_1", teacher: "dm_tch_1" },
-    2: { subject: "dummy subject 2", room: "dm_room_2", teacher: "dm_tch_2" },
-    3: { subject: "dummy subject 3", room: "dm_room_3", teacher: "dm_tch_3" },
-    4: { subject: "dummy subject 4", room: "dm_room_4", teacher: "dm_tch_4" },
-    5: { subject: "dummy subject 5", room: "dm_room_5", teacher: "dm_tch_5" },
-    6: { subject: "dummy subject 6", room: "dm_room_6", teacher: "dm_tch_6" },
-    7: { subject: "dummy subject 7", room: "dm_room_7", teacher: "dm_tch_7" },
-    8: { subject: "dummy subject 8", room: "dm_room_8", teacher: "dm_tch_8" },
-  },
-  Tuesday: {
-    1: { subject: "dummy subject 9", room: "dm_room_9", teacher: "dm_tch_9" },
-    2: { subject: "dummy subject 10", room: "dm_room_10", teacher: "dm_tch_10" },
-    3: { subject: "dummy subject 11", room: "dm_room_11", teacher: "dm_tch_11" },
-    4: { subject: "dummy subject 12", room: "dm_room_12", teacher: "dm_tch_12" },
-    5: { subject: "dummy subject 13", room: "dm_room_13", teacher: "dm_tch_13" },
-    6: { subject: "dummy subject 14", room: "dm_room_14", teacher: "dm_tch_14" },
-    7: { subject: "dummy subject 15", room: "dm_room_15", teacher: "dm_tch_15" },
-    8: { subject: "dummy subject 16", room: "dm_room_16", teacher: "dm_tch_16" },
-  },
-  Wednesday: {
-    1: { subject: "dummy subject 17", room: "dm_room_17", teacher: "dm_tch_17" },
-    2: { subject: "dummy subject 18", room: "dm_room_18", teacher: "dm_tch_18" },
-    3: { subject: "dummy subject 19", room: "dm_room_19", teacher: "dm_tch_19" },
-    4: { subject: "dummy subject 20", room: "dm_room_20", teacher: "dm_tch_20" },
-    5: { subject: "dummy subject 21", room: "dm_room_21", teacher: "dm_tch_21" },
-    6: { subject: "dummy subject 22", room: "dm_room_22", teacher: "dm_tch_22" },
-    7: { subject: "dummy subject 23", room: "dm_room_23", teacher: "dm_tch_23" },
-    8: { subject: "dummy subject 24", room: "dm_room_24", teacher: "dm_tch_24" },
-  },
-  Thursday: {
-    1: { subject: "dummy subject 25", room: "dm_room_25", teacher: "dm_tch_25" },
-    2: { subject: "dummy subject 26", room: "dm_room_26", teacher: "dm_tch_26" },
-    3: { subject: "dummy subject 27", room: "dm_room_27", teacher: "dm_tch_27" },
-    4: { subject: "dummy subject 28", room: "dm_room_28", teacher: "dm_tch_28" },
-    5: { subject: "dummy subject 29", room: "dm_room_29", teacher: "dm_tch_29" },
-    6: { subject: "dummy subject 30", room: "dm_room_30", teacher: "dm_tch_30" },
-    7: { subject: "dummy subject 31", room: "dm_room_31", teacher: "dm_tch_31" },
-    8: { subject: "dummy subject 32", room: "dm_room_32", teacher: "dm_tch_32" },
-  },
-  Friday: {
-    1: { subject: "dummy subject 33", room: "dm_room_33", teacher: "dm_tch_33" },
-    2: { subject: "dummy subject 34", room: "dm_room_34", teacher: "dm_tch_34" },
-    3: { subject: "dummy subject 35", room: "dm_room_35", teacher: "dm_tch_35" },
-    4: { subject: "dummy subject 36", room: "dm_room_36", teacher: "dm_tch_36" },
-    5: { subject: "dummy subject 37", room: "dm_room_37", teacher: "dm_tch_37" },
-    6: { subject: "dummy subject 38", room: "dm_room_38", teacher: "dm_tch_38" },
-    7: { subject: "dummy subject 39", room: "dm_room_39", teacher: "dm_tch_39" },
-    8: { subject: "dummy subject 40", room: "dm_room_40", teacher: "dm_tch_40" },
-  },
-};
 
-export default function TimetablePage() {
+
+
+import { useEffect, useState, Suspense } from "react";
+import { collection, getDocs } from "firebase/firestore";
+import { singletonFirestorePublic } from "@/lib/client/singleton/client.firebasePublic";
+
+function TimetableContent() {
+  const roomId = "67"; // fallback to "67"
+
+  const [timetableData, setTimetableData] = useState<TimetableData>({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchTimetable() {
+      setLoading(true);
+      const newData: TimetableData = {};
+
+      try {
+        const fetchPromises = DAYS.map(async (dayName, index) => {
+          const dayId = index+1;
+          newData[dayName] = {};
+          
+          const classRef = collection(
+            singletonFirestorePublic,
+            `rooms/${roomId}/table/${dayId}/class`
+          );
+          
+          const snapshot = await getDocs(classRef);
+          snapshot.forEach((doc) => {
+            const periodData = doc.data();
+            const periodId = parseInt(doc.id, 10);
+            
+            if (periodId >= 1 && periodId <= 8) {
+              newData[dayName][periodId] = {
+                subject: periodData.subject,
+                id: periodData.id,
+                teacher: periodData.teacher,
+              };
+            }
+          });
+        });
+
+        await Promise.all(fetchPromises);
+      } catch (error) {
+        console.error("Error fetching timetable data:", error);
+      } finally {
+        setTimetableData(newData);
+        setLoading(false);
+      }
+    }
+
+    if (roomId) {
+      fetchTimetable();
+    }
+  }, [roomId]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-8 pt-24 bg-white">
+        <Header />
+        <div className="text-slate-500 font-medium">Loading timetable for Room {roomId}...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-8 pt-24 bg-white">
       <Header />
@@ -154,7 +166,7 @@ export default function TimetablePage() {
                     </div>
                   );
                 } else {
-                  const classInfo = TIMETABLE_DATA[day]?.[col.periodIndex!];
+                  const classInfo = timetableData[day]?.[col.periodIndex!];
                   if (classInfo) {
                     return (
                       <div
@@ -164,9 +176,9 @@ export default function TimetablePage() {
                         <span className="font-semibold leading-tight text-slate-800">
                           {classInfo.subject}
                         </span>
-                        {classInfo.room && (
+                        {classInfo.id && (
                           <span className="text-[10px] text-slate-500 flex items-center gap-0.5 font-medium">
-                            {classInfo.room}
+                            {classInfo.id}
                           </span>
                         )}
                         {classInfo.teacher && (
@@ -193,5 +205,13 @@ export default function TimetablePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function TimetablePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <TimetableContent />
+    </Suspense>
   );
 }
