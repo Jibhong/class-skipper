@@ -10,3 +10,11 @@ export default function TimetablePage() {
     </div>
   );
 }
+
+export default function TimetablePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <TimetableContent />
+    </Suspense>
+  );
+}
