@@ -1,6 +1,6 @@
 import BuildingRoomSelector from "@/lib/client/components/BuildingRoomSelector";
 import Calendar, { DayData } from "@/lib/client/components/Calendar";
-import { Header } from "@/lib/client/components/Header";
+import { Header } from "@/lib/client/components/Components";
 
 export default function Home() {
 

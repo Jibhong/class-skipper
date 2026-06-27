@@ -42,7 +42,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const user = userDoc.data()!;
     const auth = authDoc.data()!;
 
     const valid = await bcrypt.compare(password, auth.password);
@@ -63,7 +62,8 @@ export async function POST(req: NextRequest) {
       .sign(secretKey);
 
     const response = NextResponse.json(
-      { status: 200 }
+      { username: username },
+      { status: 200, }
     );
     response.cookies.set("session", token, {
       httpOnly: true,

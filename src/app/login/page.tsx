@@ -10,6 +10,7 @@ import {
   FaSignInAlt,
   FaSpinner,
 } from "react-icons/fa";
+import { Header } from "@/lib/client/components/Components";
 
 export default function AuthPage() {
   const [username, setUsername] = useState("");
@@ -43,6 +44,7 @@ export default function AuthPage() {
         console.error(data.error);
         return;
       }
+      localStorage.setItem("userData", JSON.stringify(data));
       router.push("/");
     } catch (err) {
       console.error(err);
@@ -53,6 +55,7 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center px-4">
+      <Header />
       {/* Header */}
       <div className="mb-8 text-center">
         <h1 className="text-4xl font-bold text-gray-900 tracking-tight">
