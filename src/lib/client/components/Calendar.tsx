@@ -1,9 +1,10 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { FaAngleLeft, FaAngleRight } from "react-icons/fa";
 
 import { singletonFirestorePublic } from "@/lib/client/singleton/client.firebasePublic";
 import { doc, getDoc } from "firebase/firestore";
+import Timetable from "@/lib/client/components/Timetable";
 const MONTH_NAMES = [
   "January",
   "February",
@@ -41,6 +42,19 @@ function isSameDay(d1: Day, d2: Day): boolean {
 export default function Calendar() {
   const [records, setRecords] = useState<DayData[]>([]);
   const [nowMonth, setNowMonth] = useState<Day>({ day: 0, month: 0, year: 0 });
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (isModalOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isModalOpen]);
+
   useEffect(() => {
     async function fetchDayOff(monthString: string) {
       try {
@@ -222,18 +236,26 @@ export default function Calendar() {
                 <div className="text-lg">{month.year}</div>
               </div>
 
-              <div className="grid grid-cols-7 gap-1 mb-1">
+              {/* <div className="grid grid-cols-7 gap-1 mb-1"> */}
+              <div className="grid grid-cols-8 gap-1 mb-1">
                 {DAY_LABELS.map((label, idx) => (
                   <div
                     key={idx}
-                    className={`px-2 rounded bg-slate-300 ${label === "Sun" ? "text-red-500" : label === "Sat" ? "text-violet-800" : ""}`}
+                    // className={`px-2 rounded bg-slate-300 ${label === "Sun" ? "text-red-500" : label === "Sat" ? "text-violet-800" : ""}`}
+                    className={`px-2 rounded bg-slate-300 text-center ${label === "Sun" ? "text-red-500" : label === "Sat" ? "text-violet-800" : ""}`}
                   >
                     {label}
                   </div>
                 ))}
+                {/* dummy code */}
+                <div className="px-2 rounded bg-slate-300 text-slate-500 font-semibold text-center text-xs flex items-center justify-center">
+                  Week
+                </div>
+                {/* end of dummy code*/}
               </div>
 
-              <div className="grid grid-cols-7 grid-rows-6 gap-1">
+              <div className="grid grid-cols-8 grid-rows-6 gap-1">
+                {/* OLD CODE
                 {cells.map((cell, i) => {
                   const isSunday = i % 7 === 0;
                   const isSaturday = i % 7 === 6;
@@ -279,11 +301,108 @@ export default function Calendar() {
                     </div>
                   );
                 })}
+                */}
+                {/* dummy code */}
+                {(() => {
+                  const weeks = Array.from({ length: 6 }).map((_, weekIdx) => {
+                    return cells.slice(weekIdx * 7, (weekIdx + 1) * 7);
+                  });
+
+                  return weeks.map((weekCells, weekIdx) => (
+                    <React.Fragment key={weekIdx}>
+                      {weekCells.map((cell, dayIdx) => {
+                        const globalIdx = weekIdx * 7 + dayIdx;
+                        const isSunday = globalIdx % 7 === 0;
+                        const isSaturday = globalIdx % 7 === 6;
+
+                        if (!cell.isInThisMonth) {
+                          return (
+                            <div
+                              key={globalIdx}
+                              className={`h-12 px-2 py-1 rounded bg-slate-100 ${isSunday ? "text-red-300" : "text-slate-400"}`}
+                            >
+                              {cell.dateNumber}
+                            </div>
+                          );
+                        }
+
+                        const currentDay: Day = {
+                          year: month.year,
+                          month: month.month,
+                          day: cell.dateNumber,
+                        };
+                        const record = records.find((r) =>
+                          isSameDay(r.day, currentDay),
+                        );
+                        const isClickable =
+                          !record?.isDayOff && !isSunday && !isSaturday;
+
+                        let cellClass: string;
+                        if (record?.isDayOff)
+                          cellClass = "bg-violet-200 text-slate-400";
+                        else if (record?.isAttened)
+                          cellClass = "bg-emerald-400 text-white";
+                        else if (record) cellClass = "bg-rose-400 text-white";
+                        else
+                          cellClass = `bg-slate-200 ${isSunday ? "text-red-400" : isSaturday ? "text-violet-800" : "text-black"}`;
+
+                        return (
+                          <div
+                            key={globalIdx}
+                            className={`h-12 px-2 py-1 rounded ${cellClass} ${isClickable ? "cursor-pointer select-none transition-all hover:brightness-95 active:scale-95" : ""}`}
+                            onClick={() => isClickable && handleDayClick(currentDay)}
+                          >
+                            {cell.dateNumber}
+                          </div>
+                        );
+                      })}
+
+                      {/* View Week Button */}
+                      <button
+                        type="button"
+                        onClick={() => setIsModalOpen(true)}
+                        className="h-12 flex items-center justify-center rounded bg-slate-50 border border-slate-200 text-xs font-semibold text-pink-500 hover:text-pink-600 hover:bg-pink-50/50 cursor-pointer transition-all active:scale-95"
+                      >
+                        View
+                      </button>
+                    </React.Fragment>
+                  ));
+                })()}
+                {/* end of dummy code */}
               </div>
             </div>
           );
         })}
       </div>
+
+      {/* Timetable Modal Overlay */}
+      {isModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+          onClick={() => setIsModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto p-6 relative flex flex-col gap-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header / Title */}
+            <div className="flex justify-between items-center border-b pb-4">
+              <h2 className="text-xl font-bold text-slate-800">Weekly Timetable View</h2>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors text-2xl font-bold leading-none p-1 cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+            {/* Content */}
+            <div className="py-2">
+              <Timetable />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
