@@ -27,7 +27,7 @@ export function Header() {
             method: "POST",
         });
         if (!res.ok) return;
-        localStorage.removeItem("userData");
+        localStorage.clear()
         router.push("/login");
         setUserData(null);
     }

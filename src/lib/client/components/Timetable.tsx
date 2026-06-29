@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Header } from "@/lib/client/components/Components";
 import { collection, getDocs } from "firebase/firestore";
 import { singletonFirestorePublic } from "@/lib/client/singleton/client.firebasePublic";
+import { getPeriod } from "@/lib/shared/attendanceCodec";
 
 // 1. Define types for the Timetable data structure
 interface PeriodData {
@@ -43,18 +43,37 @@ const COLUMNS: ColumnConfig[] = [
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
-export interface AttendanceRecord {
-  day: string;
-  periodIndex: number;
-  isAttended: boolean;
+// Map day-of-week (0=Sun) to DAYS index
+function dowToDayName(dow: number): string | null {
+  // 1=Mon → "Monday", 2=Tue → "Tuesday", …, 5=Fri → "Friday"
+  if (dow >= 1 && dow <= 5) return DAYS[dow - 1];
+  return null;
 }
 
-export default function Timetable() {
+interface TimetableProps {
+  /** Base64-encoded attendance for the current month */
+  attendance?: string;
+  /** Callback when a period is toggled. dayOfMonth is 1-indexed, period is 1-indexed. */
+  onTogglePeriod?: (dayOfMonth: number, period: number) => void;
+  /** Day-of-month numbers for the week being viewed (from calendar row) */
+  weekDays?: number[];
+  /** Current month (1-indexed) */
+  month?: number;
+  /** Current year */
+  year?: number;
+}
+
+export default function Timetable({
+  attendance,
+  onTogglePeriod,
+  weekDays,
+  month,
+  year,
+}: TimetableProps) {
   const roomId = "67"; // fallback to "67"
 
   const [timetableData, setTimetableData] = useState<TimetableData>({});
   const [loading, setLoading] = useState(true);
-  const [records, setRecords] = useState<AttendanceRecord[]>([]);
 
   useEffect(() => {
     async function fetchTimetable() {
@@ -98,17 +117,28 @@ export default function Timetable() {
     fetchTimetable();
   }, [roomId]);
 
-  const toggleAttendance = (day: string, periodIndex: number) => {
-    setRecords((prev) => {
-      const record = prev.find((r) => r.day === day && r.periodIndex === periodIndex);
-      const filtered = prev.filter((r) => !(r.day === day && r.periodIndex === periodIndex));
-      if (record) {
-        return [...filtered, { ...record, isAttended: !record.isAttended }];
-      } else {
-        // First click sets it to attended (true/green)
-        return [...filtered, { day, periodIndex, isAttended: true }];
+  // Build a mapping: dayName → dayOfMonth (for the week being viewed)
+  const dayOfMonthMap: Record<string, number> = {};
+  if (weekDays && month && year) {
+    for (const dayNum of weekDays) {
+      const date = new Date(year, month - 1, dayNum);
+      const dow = date.getDay(); // 0=Sun, 1=Mon, ...
+      const name = dowToDayName(dow);
+      if (name) {
+        dayOfMonthMap[name] = dayNum;
       }
-    });
+    }
+  }
+
+  const hasAttendanceContext = attendance !== undefined && Object.keys(dayOfMonthMap).length > 0;
+
+  const handlePeriodClick = (day: string, periodIndex: number) => {
+    if (hasAttendanceContext && onTogglePeriod) {
+      const dayNum = dayOfMonthMap[day];
+      if (dayNum) {
+        onTogglePeriod(dayNum, periodIndex);
+      }
+    }
   };
 
   if (loading) {
@@ -150,7 +180,14 @@ export default function Timetable() {
           <React.Fragment key={day}>
             {/* Day Label Cell */}
             <div className="p-2 font-semibold text-xs text-slate-700 bg-slate-100/80 rounded-lg flex items-center justify-center text-center">
-              {day}
+              <div>
+                <div>{day}</div>
+                {hasAttendanceContext && dayOfMonthMap[day] && (
+                  <div className="text-[9px] font-normal text-slate-400 mt-0.5">
+                    {dayOfMonthMap[day]}/{month}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Period & Break cells */}
@@ -175,25 +212,31 @@ export default function Timetable() {
               } else {
                 const classInfo = timetableData[day]?.[col.periodIndex!];
                 if (classInfo) {
-                  // Find the dynamic state for this specific day and period
-                  const record = records.find(
-                    (r) => r.day === day && r.periodIndex === col.periodIndex
-                  );
+                  // Determine attendance state from base64 string
                   let cellBgClass: string;
-                  if (record) {
-                    cellBgClass = record.isAttended
+                  const isClickable = hasAttendanceContext && !!dayOfMonthMap[day];
+
+                  if (hasAttendanceContext && dayOfMonthMap[day]) {
+                    const attended = getPeriod(
+                      attendance!,
+                      dayOfMonthMap[day],
+                      col.periodIndex!,
+                    );
+                    cellBgClass = attended
                       ? "bg-emerald-400 hover:bg-emerald-500 text-white"
-                      : "bg-rose-400 hover:bg-rose-500 text-white";
+                      : "bg-slate-200 text-slate-800 hover:bg-slate-300";
                   } else {
-                    // Default state is slate when it hasn't been clicked (matching the Calendar)
+                    // No attendance context (standalone page) — show default
                     cellBgClass = "bg-slate-200 text-slate-800 hover:bg-slate-300";
                   }
 
                   return (
                     <div
                       key={`period-${day}-${colIdx}`}
-                      onClick={() => toggleAttendance(day, col.periodIndex!)}
-                      className={`p-2 text-[11px] rounded-lg flex flex-col justify-center gap-0.5 transition-all duration-150 leading-tight cursor-pointer select-none ${cellBgClass} hover:brightness-105 active:scale-[0.98]`}
+                      onClick={() =>
+                        isClickable && handlePeriodClick(day, col.periodIndex!)
+                      }
+                      className={`p-2 text-[11px] rounded-lg flex flex-col justify-center gap-0.5 transition-all duration-150 leading-tight ${isClickable ? "cursor-pointer select-none" : ""} ${cellBgClass} hover:brightness-105 active:scale-[0.98]`}
                     >
                       <span className="font-semibold leading-tight">
                         {classInfo.subject}

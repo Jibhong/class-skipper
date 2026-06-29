@@ -11,6 +11,7 @@ import {
   FaSpinner,
 } from "react-icons/fa";
 import { Header } from "@/lib/client/components/Components";
+import { logInToFirebase } from "@/lib/client/client.firebaseTokenFetcher";
 
 export default function AuthPage() {
   const [username, setUsername] = useState("");
@@ -45,6 +46,7 @@ export default function AuthPage() {
         return;
       }
       localStorage.setItem("userData", JSON.stringify(data));
+      logInToFirebase();
       router.push("/");
     } catch (err) {
       console.error(err);

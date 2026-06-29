@@ -1,10 +1,19 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { FaAngleLeft, FaAngleRight } from "react-icons/fa";
 
 import { singletonFirestorePublic } from "@/lib/client/singleton/client.firebasePublic";
-import { doc, getDoc } from "firebase/firestore";
+import { singletonFirestore } from "@/lib/client/singleton/client.firebaseAuth";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import Timetable from "@/lib/client/components/Timetable";
+import {
+  emptyAttendance,
+  setFullDay,
+  isDayFullyAttended,
+  isDayPartiallyAttended,
+  togglePeriod,
+} from "@/lib/shared/attendanceCodec";
+
 const MONTH_NAMES = [
   "January",
   "February",
@@ -39,11 +48,23 @@ function isSameDay(d1: Day, d2: Day): boolean {
   return d1.year === d2.year && d1.month === d2.month && d1.day === d2.day;
 }
 
+function monthKey(d: Day): string {
+  return `${d.year}-${String(d.month).padStart(2, "0")}`;
+}
+
 export default function Calendar() {
   const [records, setRecords] = useState<DayData[]>([]);
   const [nowMonth, setNowMonth] = useState<Day>({ day: 0, month: 0, year: 0 });
-  const [isModalOpen, setIsModalOpen] = useState(false);
 
+  // --- Attendance state (base64 per month) ---
+  const [attendance, setAttendance] = useState<string>(emptyAttendance());
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+
+  // --- Modal state ---
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalWeekDays, setModalWeekDays] = useState<number[]>([]);
+
+  // Lock body scroll when modal open
   useEffect(() => {
     if (isModalOpen) {
       document.body.style.overflow = "hidden";
@@ -55,6 +76,65 @@ export default function Calendar() {
     };
   }, [isModalOpen]);
 
+  // --- Get username from localStorage ---
+  const getUsername = (): string | null => {
+    try {
+      const stored = localStorage.getItem("userData");
+      if (!stored) return null;
+      const parsed = JSON.parse(stored);
+      return parsed.username || null;
+    } catch {
+      return null;
+    }
+  };
+
+  // --- Save attendance directly to Firestore ---
+  const saveAttendance = useCallback(
+    async (newData: string) => {
+      if (!nowMonth.year || !nowMonth.month) return;
+      const username = getUsername();
+      if (!username) return;
+      try {
+        const docRef = doc(singletonFirestore, "users", username, "attendance", monthKey(nowMonth));
+        await setDoc(docRef, { data: newData, updatedAt: Date.now() }, { merge: true });
+      } catch (err) {
+        console.error("Failed to save attendance:", err);
+      }
+    },
+    [nowMonth],
+  );
+
+  // --- Load attendance from Firestore when month changes ---
+  useEffect(() => {
+    if (!nowMonth.year || !nowMonth.month) return;
+    const username = getUsername();
+    if (!username) return;
+    let cancelled = false;
+
+    async function loadAttendance() {
+      setAttendanceLoading(true);
+      try {
+        const docRef = doc(singletonFirestore, "users", username!, "attendance", monthKey(nowMonth));
+        const snap = await getDoc(docRef);
+        if (!cancelled) {
+          const data = snap.exists() ? snap.data()?.data : null;
+          setAttendance(data || emptyAttendance());
+        }
+      } catch (err) {
+        console.error("Failed to load attendance:", err);
+        if (!cancelled) setAttendance(emptyAttendance());
+      } finally {
+        if (!cancelled) setAttendanceLoading(false);
+      }
+    }
+
+    loadAttendance();
+    return () => {
+      cancelled = true;
+    };
+  }, [nowMonth]);
+
+  // --- Load day-off data ---
   useEffect(() => {
     async function fetchDayOff(monthString: string) {
       try {
@@ -93,6 +173,8 @@ export default function Calendar() {
 
     fetchDayOff(`${nowMonth.year}-${String(nowMonth.month).padStart(2, "0")}`);
   }, [nowMonth]);
+
+  // --- Month carousel state ---
   const [allMonths, setAllMonths] = useState<Day[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -109,7 +191,6 @@ export default function Calendar() {
       const endDate = new Date(`${data["end-calendar"]}-01`);
 
       const startCalendar: Day = { year: startDate.getFullYear(), month: startDate.getMonth() + 1, day: startDate.getDate() };
-
       const endCalendar: Day = { year: endDate.getFullYear(), month: endDate.getMonth() + 1, day: endDate.getDate() };
       const result: Day[] = [];
       let y = startCalendar.year;
@@ -135,21 +216,32 @@ export default function Calendar() {
     });
   };
 
+  // --- Day click → mark entire day attended (all 8 periods) ---
   const handleDayClick = (date: Day) => {
     const record = records.find((r) => isSameDay(r.day, date));
     const dow = new Date(date.year, date.month - 1, date.day).getDay();
     if (record?.isDayOff || dow === 0 || dow === 6) return;
 
-    setRecords((prev) => {
-      const filtered = prev.filter((r) => !isSameDay(r.day, date));
-      return record
-        ? [...filtered, { ...record, isAttened: !record.isAttened }]
-        : [
-          ...filtered,
-          { day: date, isDayOff: false, isAttened: true, isHaveNote: false },
-        ];
-    });
+    const fullyAttended = isDayFullyAttended(attendance, date.day);
+    const newAttendance = setFullDay(attendance, date.day, !fullyAttended);
+    setAttendance(newAttendance);
+    saveAttendance(newAttendance);
   };
+
+  // --- Period toggle (called from Timetable modal) ---
+  const handleTogglePeriod = (dayOfMonth: number, period: number) => {
+    const newAttendance = togglePeriod(attendance, dayOfMonth, period);
+    setAttendance(newAttendance);
+    saveAttendance(newAttendance);
+  };
+
+  // --- Open modal with week context ---
+  const openWeekModal = (weekDayNumbers: number[]) => {
+    setModalWeekDays(weekDayNumbers);
+    setIsModalOpen(true);
+  };
+
+  // --- Intersection observer for month scroll ---
   const monthRefs = useRef<(HTMLDivElement | null)[]>([]);
   useEffect(() => {
     if (allMonths.length === 0) return;
@@ -167,7 +259,7 @@ export default function Calendar() {
         },
         {
           root: scrollRef.current,
-          threshold: 0.1, // fires when >50% of the panel is visible
+          threshold: 0.1,
         },
       );
       obs.observe(el);
@@ -176,6 +268,7 @@ export default function Calendar() {
 
     return () => observers.forEach((obs) => obs.disconnect());
   }, [allMonths]);
+
   return (
     <div className="max-w-xl mx-auto relative flex items-center justify-center">
       <div className="absolute top-0 right-0 flex gap-2 z-10">
@@ -234,75 +327,28 @@ export default function Calendar() {
                   {MONTH_NAMES[month.month - 1]}
                 </div>
                 <div className="text-lg">{month.year}</div>
+                {attendanceLoading && (
+                  <div className="text-xs text-slate-400 ml-2 mb-3 animate-pulse">
+                    loading...
+                  </div>
+                )}
               </div>
 
-              {/* <div className="grid grid-cols-7 gap-1 mb-1"> */}
               <div className="grid grid-cols-8 gap-1 mb-1">
                 {DAY_LABELS.map((label, idx) => (
                   <div
                     key={idx}
-                    // className={`px-2 rounded bg-slate-300 ${label === "Sun" ? "text-red-500" : label === "Sat" ? "text-violet-800" : ""}`}
                     className={`px-2 rounded bg-slate-300 text-center ${label === "Sun" ? "text-red-500" : label === "Sat" ? "text-violet-800" : ""}`}
                   >
                     {label}
                   </div>
                 ))}
-                {/* dummy code */}
                 <div className="px-2 rounded bg-slate-300 text-slate-500 font-semibold text-center text-xs flex items-center justify-center">
                   Week
                 </div>
-                {/* end of dummy code*/}
               </div>
 
               <div className="grid grid-cols-8 grid-rows-6 gap-1">
-                {/* OLD CODE
-                {cells.map((cell, i) => {
-                  const isSunday = i % 7 === 0;
-                  const isSaturday = i % 7 === 6;
-
-                  if (!cell.isInThisMonth) {
-                    return (
-                      <div
-                        key={i}
-                        className={`h-12 px-2 py-1 rounded bg-slate-100 ${isSunday ? "text-red-300" : "text-slate-400"}`}
-                      >
-                        {cell.dateNumber}
-                      </div>
-                    );
-                  }
-
-                  const currentDay: Day = {
-                    year: month.year,
-                    month: month.month,
-                    day: cell.dateNumber,
-                  };
-                  const record = records.find((r) =>
-                    isSameDay(r.day, currentDay),
-                  );
-                  const isClickable =
-                    !record?.isDayOff && !isSunday && !isSaturday;
-
-                  let cellClass: string;
-                  if (record?.isDayOff)
-                    cellClass = "bg-violet-200 text-slate-400";
-                  else if (record?.isAttened)
-                    cellClass = "bg-emerald-400 text-white";
-                  else if (record) cellClass = "bg-rose-400 text-white";
-                  else
-                    cellClass = `bg-slate-200 ${isSunday ? "text-red-400" : isSaturday ? "text-violet-800" : "text-black"}`;
-
-                  return (
-                    <div
-                      key={i}
-                      className={`h-12 px-2 py-1 rounded ${cellClass} ${isClickable ? "cursor-pointer select-none transition-all hover:brightness-95 active:scale-95" : ""}`}
-                      onClick={() => isClickable && handleDayClick(currentDay)}
-                    >
-                      {cell.dateNumber}
-                    </div>
-                  );
-                })}
-                */}
-                {/* dummy code */}
                 {(() => {
                   const weeks = Array.from({ length: 6 }).map((_, weekIdx) => {
                     return cells.slice(weekIdx * 7, (weekIdx + 1) * 7);
@@ -337,12 +383,25 @@ export default function Calendar() {
                         const isClickable =
                           !record?.isDayOff && !isSunday && !isSaturday;
 
+                        // Determine cell color from base64 attendance
+                        const isCurrentMonth =
+                          month.year === nowMonth.year &&
+                          month.month === nowMonth.month;
+                        const fullyAttended =
+                          isCurrentMonth &&
+                          isDayFullyAttended(attendance, cell.dateNumber);
+                        const partiallyAttended =
+                          isCurrentMonth &&
+                          !fullyAttended &&
+                          isDayPartiallyAttended(attendance, cell.dateNumber);
+
                         let cellClass: string;
                         if (record?.isDayOff)
                           cellClass = "bg-violet-200 text-slate-400";
-                        else if (record?.isAttened)
+                        else if (fullyAttended)
                           cellClass = "bg-emerald-400 text-white";
-                        else if (record) cellClass = "bg-rose-400 text-white";
+                        else if (partiallyAttended)
+                          cellClass = "bg-amber-400 text-white";
                         else
                           cellClass = `bg-slate-200 ${isSunday ? "text-red-400" : isSaturday ? "text-violet-800" : "text-black"}`;
 
@@ -350,7 +409,9 @@ export default function Calendar() {
                           <div
                             key={globalIdx}
                             className={`h-12 px-2 py-1 rounded ${cellClass} ${isClickable ? "cursor-pointer select-none transition-all hover:brightness-95 active:scale-95" : ""}`}
-                            onClick={() => isClickable && handleDayClick(currentDay)}
+                            onClick={() =>
+                              isClickable && handleDayClick(currentDay)
+                            }
                           >
                             {cell.dateNumber}
                           </div>
@@ -360,7 +421,12 @@ export default function Calendar() {
                       {/* View Week Button */}
                       <button
                         type="button"
-                        onClick={() => setIsModalOpen(true)}
+                        onClick={() => {
+                          const dayNums = weekCells
+                            .filter((c) => c.isInThisMonth)
+                            .map((c) => c.dateNumber);
+                          openWeekModal(dayNums);
+                        }}
                         className="h-12 flex items-center justify-center rounded bg-slate-50 border border-slate-200 text-xs font-semibold text-pink-500 hover:text-pink-600 hover:bg-pink-50/50 cursor-pointer transition-all active:scale-95"
                       >
                         View
@@ -368,7 +434,6 @@ export default function Calendar() {
                     </React.Fragment>
                   ));
                 })()}
-                {/* end of dummy code */}
               </div>
             </div>
           );
@@ -398,7 +463,13 @@ export default function Calendar() {
             </div>
             {/* Content */}
             <div className="py-2">
-              <Timetable />
+              <Timetable
+                attendance={attendance}
+                onTogglePeriod={handleTogglePeriod}
+                weekDays={modalWeekDays}
+                month={nowMonth.month}
+                year={nowMonth.year}
+              />
             </div>
           </div>
         </div>

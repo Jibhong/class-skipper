@@ -1,0 +1,25 @@
+// import jwt from "jsonwebtoken";
+
+import { jwtVerify } from "jose";
+
+export async function verifyTokenServer(token?: string | null): Promise<boolean | string> {
+
+  if (!token) return false;
+
+  const secret = process.env.JWT_SECRET;
+  if (!secret) return false;
+
+  try {
+    const secretKey = new TextEncoder().encode(secret);
+
+    const { payload } = await jwtVerify(token, secretKey);
+
+    if (typeof(payload.username) !== "string") {
+      return false;
+    }
+
+    return payload.username;
+  } catch {
+    return false;
+  }
+}
