@@ -89,17 +89,37 @@ export default function Calendar() {
   };
 
   // --- Save attendance directly to Firestore ---
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clean up timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const saveAttendance = useCallback(
-    async (newData: string) => {
+    (newData: string) => {
       if (!nowMonth.year || !nowMonth.month) return;
       const username = getUsername();
       if (!username) return;
-      try {
-        const docRef = doc(singletonFirestore, "users", username, "attendance", monthKey(nowMonth));
-        await setDoc(docRef, { data: newData, updatedAt: Date.now() }, { merge: true });
-      } catch (err) {
-        console.error("Failed to save attendance:", err);
+
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
       }
+
+      const currentMonthKey = monthKey(nowMonth);
+
+      saveTimeoutRef.current = setTimeout(async () => {
+        try {
+          const docRef = doc(singletonFirestore, "users", username, "attendance", currentMonthKey);
+          await setDoc(docRef, { data: newData, updatedAt: Date.now() }, { merge: true });
+        } catch (err) {
+          console.error("Failed to save attendance:", err);
+        }
+      }, 1500);
     },
     [nowMonth],
   );
