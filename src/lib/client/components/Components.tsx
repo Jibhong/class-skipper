@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { useFirebaseContext } from "@/lib/client/context/firebaseContext";
+
 type UserData = {
     username: string;
 };
@@ -22,12 +24,14 @@ export function Header() {
 
     const router = useRouter();
 
+    const { setIsFirebaseReady } = useFirebaseContext();
     async function logout() {
         const res = await fetch("/api/logout", {
             method: "POST",
         });
         if (!res.ok) return;
-        localStorage.clear()
+        setIsFirebaseReady(false);
+        localStorage.clear();
         router.push("/login");
         setUserData(null);
     }

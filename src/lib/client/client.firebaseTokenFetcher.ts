@@ -4,9 +4,16 @@ import { useEffect } from "react";
 import { signInWithCustomToken } from "firebase/auth";
 import { singletonFirebaseAuth } from "@/lib/client/singleton/client.firebaseAuth";
 
-export async function logInToFirebase() {
+import { useFirebaseContext } from "@/lib/client/context/firebaseContext";
+
+export async function logInToFirebase(
+  setIsFirebaseReady?: (ready: boolean) => void,
+) {
   console.log("Attempting to log in to Firebase...");
-  console.log("API Key loaded (first 5 chars):", process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.substring(0, 5));
+  console.log(
+    "API Key loaded (first 5 chars):",
+    process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.substring(0, 5),
+  );
   async function fetchToken() {
     const storedExpiry = localStorage.getItem("tokenExpiry");
     if (storedExpiry && parseInt(storedExpiry) > Date.now()) return;
@@ -22,24 +29,39 @@ export async function logInToFirebase() {
     const token = localStorage.getItem("token");
     if (!token) return;
     console.log("signing in to firebase with token:", "**HIDDEN**");
-    await signInWithCustomToken(singletonFirebaseAuth, token);
+    // console.log("signing in to firebase with token:", token);
+    try {
+      await signInWithCustomToken(singletonFirebaseAuth, token);
+      setIsFirebaseReady?.(true);
+    } catch (err) {
+      setIsFirebaseReady?.(false);
+      throw err; // optional: rethrow if the caller should handle it
+    }
   }
   await fetchToken();
   await signInWithToken();
 }
 
 export default function FirebaseTokenFetcher() {
-  useEffect(() => {
-    // Run immediately on mount
-    logInToFirebase();
+  const { setIsFirebaseReady } = useFirebaseContext();
 
-    // Set up interval to run every 1 minute
-    const intervalId = setInterval(() => {
-      logInToFirebase();
-    }, 10 * 60 * 1000);
+  useEffect(() => {
+    logInToFirebase(setIsFirebaseReady);
+
+    const intervalId = setInterval(
+      () => {
+        logInToFirebase(setIsFirebaseReady);
+      },
+      10 * 60 * 1000,
+    );
 
     return () => clearInterval(intervalId);
   }, []);
 
+  useEffect(() => {
+    setIsFirebaseReady(false);
+  }, []);
+
   return null;
 }
+
